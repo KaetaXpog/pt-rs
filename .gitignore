@@ -1,0 +1,6 @@
+/target
+*.sqlite
+data/*
+!data/.gitkeep
+
+config/*.cookies
