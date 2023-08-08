@@ -1,6 +1,16 @@
 ## About
 Rust写的pt站爬虫。爬取资源信息到数据库。用于检索。
 
+## 使用方法
+目前支持多个pt站，以okpt为例。
+1. 新建config/okpt.cookies 文件，从浏览器获得okpt站的cookies。文件内容大致以下格式
+```
+c_secure_uid=XXXXXX; c_secure_pass=XXXX; c_secure_ssl=eWVhaA%3D%3D; c_secure_tracker_ssl=eWVhaA%3D%3D; c_secure_login=bm9wZQ%3D%3D
+
+```
+
+2. cargo run
+
 ## TODO
 - [x] 把cookies从代码中分离出来
 - [x] 增加爬虫调度器
