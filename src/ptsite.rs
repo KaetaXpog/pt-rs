@@ -4,6 +4,7 @@ use crate::db;
 use reqwest::{cookie::Jar, Url};
 use std::io::Read;
 use std::fs::File;
+use std::str::FromStr;
 
 pub fn okpt_url_by_page(page: u32) -> String {
     format!(
@@ -79,6 +80,20 @@ impl Site{
 impl ToString for Site{
     fn to_string(&self) -> String {
         format!("{:?}", self)
+    }
+}
+
+impl FromStr for Site{
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_ref() {
+            "icc2022" | "icc" => Ok(Site::ICC2022), 
+            "okpt" => Ok(Site::OKPT),
+            "ggpt" => Ok(Site::GGPT),
+            "carpt" => Ok(Site::CARPT),
+            "pttime" => Ok(Site::PTTIME),
+            _ => Err("ParseSiteError".into())
+        }
     }
 }
 
