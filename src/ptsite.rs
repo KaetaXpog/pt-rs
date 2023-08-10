@@ -1,6 +1,6 @@
 /// some pt site related logic
 use crate::scheduler::Scheduler;
-use crate::db;
+use crate::{db, client};
 use reqwest::{cookie::Jar, Url};
 use std::io::Read;
 use std::fs::File;
@@ -21,6 +21,8 @@ pub fn icc2022_url_by_page(page: u32) -> String {
         "https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=0&cat409=1&cat405=1&cat404=1&cat401=1&page={}",
         page
     )
+    // spstate: 2 -> free, 4-> 2xfree
+    // format!("https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=4&cat409=1&cat405=1&cat404=1&cat401=1&page={}", )
 }
 
 fn ggpt_url_by_page(page: u32) -> String{
@@ -146,6 +148,15 @@ pub async fn scrape_pttime(start: u32, end: u32, db_name: &str){
     );
     let conn = db::create_table(db_name);
     sche.finish_the_work(&conn).await;
+}
+
+/// Assuming there exists only one {} in url_template which can be replaced
+/// example: `https://www.icc2022.com/torrents.php?cat401=1&page={}`
+pub async fn scrape_pt_site(site: Site, url_template: &str, start: u32, db_name: &str){
+    let client = client::build_pt_client(site);
+    let url = url_template.replace("{}", start.to_string().as_str());
+
+    todo!()
 }
 
 #[test]

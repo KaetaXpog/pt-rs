@@ -34,11 +34,16 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// does testing things
-    Sample ,
+    Sample{
+        name: Option<String>,   // save to ./data/{name}.html
+        #[arg(long)]
+        url: Option<String>
+    } ,
     Scrape{
         start: u32,
         end: u32
-    }
+    },
+    Free,
 }
 
 #[tokio::main]
@@ -50,13 +55,20 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Sample => {
+        Commands::Sample { name, url }=> {
             let client = client::build_pt_client(cli.site);
-            let url = format!("{}/torrents.php", cli.site.url_site());
+            let url = match url {
+                None => format!("{}/torrents.php", cli.site.url_site()),
+                Some(s) => s
+            };
             
             let html = client::get_html(&client, &url).await.unwrap();
-            html.save_to(&format!("./data/{}_torrents.html", 
-                cli.site.to_string()));
+            let name = match name {
+                None => format!("./data/{}.html", cli.site.to_string()),
+                Some(s) => format!("./data/{}.html", s)
+            };
+            html.save_to(&name);
+            println!("SAVE {} to {}", url, name);
         }
         Commands::Scrape { start, end } => {
             match cli.site {
@@ -66,6 +78,9 @@ async fn main() {
                 Site::PTTIME => ptsite::scrape_pttime(start, end, db_name).await,
                 Site::ICC2022 => ptsite::scrape_icc2022(start, end, db_name).await
             }
+        }
+        Commands::Free => {
+            todo!()
         }
     }
 }
