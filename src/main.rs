@@ -52,9 +52,10 @@ async fn main() {
     match cli.command {
         Commands::Sample => {
             let client = client::build_pt_client(cli.site);
-            let url = format!("{}/torrents.html", cli.site.url_site());
-            client::get_html(&client, &url).await.unwrap()
-            .save_to(&format!("./data/{}_torrents.html", 
+            let url = format!("{}/torrents.php", cli.site.url_site());
+            
+            let html = client::get_html(&client, &url).await.unwrap();
+            html.save_to(&format!("./data/{}_torrents.html", 
                 cli.site.to_string()));
         }
         Commands::Scrape { start, end } => {
@@ -67,6 +68,4 @@ async fn main() {
             }
         }
     }
-
-    // one_page_for_all_site(db_name).await;
 }
