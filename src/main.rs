@@ -1,31 +1,15 @@
 use env_logger;
 use pt_rs::{ptsite::{self}, client};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 use pt_rs::ptsite::Site;
 use pt_rs::utils::SaveTo;
 
-async fn one_page_for_all_site(db_name: &str){
-    ptsite::scrape_okpt(0, 0, db_name).await;
-    ptsite::scrape_icc2022(0, 0, db_name).await;
-    ptsite::scrape_ggpt(0, 0, db_name).await;
-    ptsite::scrape_carpt(0, 0, db_name).await;
-    ptsite::scrape_pttime(0, 0, db_name).await;
-}
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// Optional name to operate on
     site: Site,
-
-    /// Sets a custom config file
-    #[arg(short, long, value_name = "FILE")]
-    config: Option<PathBuf>,
-
-    /// Turn debugging information on
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    debug: u8,
 
     #[command(subcommand)]
     command: Commands,
@@ -80,7 +64,10 @@ async fn main() {
             }
         }
         Commands::Free => {
-            todo!()
+            let site = cli.site;
+            for start in site.free_starts(){
+                ptsite::scrape_pt_site(site, start, db_name).await;
+            }
         }
     }
 }

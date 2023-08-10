@@ -12,6 +12,7 @@ pub mod db;
 pub mod ptsite;
 pub mod scheduler;
 pub mod utils;
+pub mod parse;
 
 // re-export some item
 pub use dataitem::DataItem;

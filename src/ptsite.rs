@@ -1,10 +1,15 @@
+use crate::client::get_html_with_retry;
+use crate::db::create_table;
 /// some pt site related logic
 use crate::scheduler::Scheduler;
-use crate::{db, client};
+use crate::{db, client, process_table};
+
 use reqwest::{cookie::Jar, Url};
 use std::io::Read;
 use std::fs::File;
 use std::str::FromStr;
+use crate::parse::parse_next_href;
+use crate::utils;
 
 /// This is the default time zone for all pt sites in China.
 pub const TIME_ZONE: &str = "+08:00";
@@ -79,6 +84,16 @@ impl Site{
         };
         res.to_owned()
     }
+    pub fn free_starts(&self) -> Vec<&str>{
+        match self {
+            Self::ICC2022 => vec![
+                "https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=4&cat409=1&cat405=1&cat404=1&cat401=1&page=0",
+                "https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=2&cat409=1&cat405=1&cat404=1&cat401=1&page=0"
+            ],
+            Self::OKPT => todo!(),
+            _ => todo!()
+        }
+    }
 }
 
 impl ToString for Site{
@@ -152,11 +167,23 @@ pub async fn scrape_pttime(start: u32, end: u32, db_name: &str){
 
 /// Assuming there exists only one {} in url_template which can be replaced
 /// example: `https://www.icc2022.com/torrents.php?cat401=1&page={}`
-pub async fn scrape_pt_site(site: Site, url_template: &str, start: u32, db_name: &str){
+pub async fn scrape_pt_site(site: Site, start: &str, db_name: &str){
     let client = client::build_pt_client(site);
-    let url = url_template.replace("{}", start.to_string().as_str());
+    let mut url = start.to_owned();
+    let conn = create_table(db_name);
 
-    todo!()
+    loop {
+        let html = get_html_with_retry(&client, &url, 3).await.unwrap();
+        let items = process_table(&html, &site);
+        db::insert_or_update_batch(&conn, items);
+
+        let nextq = parse_next_href(&html);
+        if nextq.is_none() { break; }
+        url = format!("{}/torrents.php{}", site.url_site(), nextq.unwrap());
+        println!("NEXT: {}", url);
+        
+        utils::sleep_secs(2);
+    }
 }
 
 #[test]

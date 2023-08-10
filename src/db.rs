@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 
-use crate::{DataItem, ptsite::Discount};
+use crate::{ptsite::Discount, DataItem};
 use sqlite::{self, Connection};
 
 const TABLE_NAME: &str = "resources";
@@ -116,14 +116,14 @@ where
     str::parse(s).expect(&format!("parse {:?} failed", s))
 }
 
-fn discount_id(discount: &Option<Discount>) -> i32{
+fn discount_id(discount: &Option<Discount>) -> i32 {
     match discount {
         None => -1,
         Some(x) => match x {
             Discount::DoubleFree => 0,
             Discount::Free => 1,
-            _ => 2
-        }
+            _ => 2,
+        },
     }
 }
 
@@ -132,7 +132,7 @@ impl DataItem {
         let discount_id: i32 = discount_id(&self.discount);
         let due = match self.discount_due {
             None => "".to_string(),
-            Some(x) => x.to_string()
+            Some(x) => x.to_string(),
         };
         let ins = format!(
             "
@@ -200,7 +200,6 @@ impl DataItem {
         }
 
         mains
-
     }
 
     fn from_name_value_pairs(nvs: &[(&str, Option<&str>)]) -> (usize, Self) {
@@ -254,57 +253,61 @@ impl DataItem {
     }
 }
 
-/// this function is used for test data generation
-fn gen_test_data() -> DataItem {
-    DataItem::new(
-        "ddd",
-        "this is a test",
-        5,
-        0,
-        4,
-        1.0,
-        45211,
-        "https://www.okpt.net/details.php?id=4553&hit=1",
-        None,
-        None,
-    )
-}
+#[cfg(test)]
+mod test {
+    use super::*;
+    /// this function is used for test data generation
+    fn gen_test_data() -> DataItem {
+        DataItem::new(
+            "ddd",
+            "this is a test",
+            5,
+            0,
+            4,
+            1.0,
+            45211,
+            "https://www.okpt.net/details.php?id=4553&hit=1",
+            None,
+            None,
+        )
+    }
 
-#[test]
-fn test_insert_twice_then_query() {
-    let db_name = "./data/test/i2q.sqlite";
-    let conn = create_table(db_name);
-    let data = gen_test_data();
+    #[test]
+    fn test_insert_twice_then_query() {
+        let db_name = "./data/test/i2q.sqlite";
+        let conn = create_table(db_name);
+        let data = gen_test_data();
 
-    // insert once
-    insert_item(&conn, &data);
-    let res = query_same_item(&conn, &data);
-    assert_eq!(res.len(), 1);
+        // insert once
+        insert_item(&conn, &data);
+        let res = query_same_item(&conn, &data);
+        assert_eq!(res.len(), 1);
 
-    // insert twice
-    insert_item(&conn, &data);
-    let res = query_same_item(&conn, &data);
-    assert_eq!(res.len(), 2);
+        // insert twice
+        insert_item(&conn, &data);
+        let res = query_same_item(&conn, &data);
+        assert_eq!(res.len(), 2);
 
-    // if conn is not dropped here, file descriptor of db_name
-    // may prevent immediate removal
-    drop(conn);
-    // delete the test file
-    delete_db(db_name);
-}
+        // if conn is not dropped here, file descriptor of db_name
+        // may prevent immediate removal
+        drop(conn);
+        // delete the test file
+        delete_db(db_name);
+    }
 
-#[test]
-fn test_insert_or_update_item() {
-    let db_name = "./data/test/iou.sqlite";
-    let conn = create_table(db_name);
-    let data = gen_test_data();
+    #[test]
+    fn test_insert_or_update_item() {
+        let db_name = "./data/test/iou.sqlite";
+        let conn = create_table(db_name);
+        let data = gen_test_data();
 
-    insert_or_update_item(&conn, &data);
-    insert_or_update_item(&conn, &data);
-    insert_or_update_item(&conn, &data);
-    let res = query_same_item(&conn, &data);
-    assert_eq!(res.len(), 1);
+        insert_or_update_item(&conn, &data);
+        insert_or_update_item(&conn, &data);
+        insert_or_update_item(&conn, &data);
+        let res = query_same_item(&conn, &data);
+        assert_eq!(res.len(), 1);
 
-    drop(conn);
-    delete_db(db_name);
+        drop(conn);
+        delete_db(db_name);
+    }
 }
