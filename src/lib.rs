@@ -1,7 +1,9 @@
 use chrono::{DateTime, Local, TimeZone, Utc};
 use itertools::Itertools;
 use log::{debug, error};
+use ptsite::Discount;
 use ptsite::Site;
+use ptsite::TIME_ZONE;
 use scraper::{ElementRef, Html, Selector};
 
 pub mod client;
@@ -45,7 +47,6 @@ pub fn process_table(html: &str, site: &Site) -> Vec<DataItem> {
         .collect_vec()
 }
 
-// This may be OPKT only
 pub fn process_headers(tr_head: ElementRef) -> Vec<String> {
     let mut res = vec![];
     let td_tag = Selector::parse("td").unwrap();
@@ -74,12 +75,15 @@ pub fn process_row_data(site: &Site, tr: ElementRef, headers: &Vec<String>) -> D
     let mut catogray: String = "".to_owned();
     let mut title: String = "".to_owned();
     let mut desc: String = "".to_owned();
-    let mut finished:   u32 = 0;
-    let mut download:   u32 = 0;
-    let mut upload:     u32 = 0;
-    let mut size:       f32 = 0.0;
+    let mut finished: u32 = 0;
+    let mut download: u32 = 0;
+    let mut upload: u32 = 0;
+    let mut size: f32 = 0.0;
     let mut publish_time: i64 = 0;
     let mut src_link: String = "".into();
+
+    let mut discount: Option<Discount> = None;
+    let mut discount_due: Option<i64> = None; // TimeStamp
 
     for (td, header) in tr.select(&td_rowfollow).zip(headers) {
         debug!("{} : {}", header, td.html());
@@ -99,45 +103,69 @@ pub fn process_row_data(site: &Site, tr: ElementRef, headers: &Vec<String>) -> D
                 // title is the title attr value of the a tag in TD
                 // desc is the last text node in the TD
 
+                // FIND the td.embedded we want
                 let selector = "td.embedded".try_into().unwrap();
-                let td_embeddeds = td.select(
-                    &selector);
+                let td_embeddeds = td.select(&selector);
+                let first_td = td_embeddeds
+                    .into_iter()
+                    .find(|&node| node.select(&"a".try_into().unwrap()).next().is_some())
+                    .unwrap();
 
-                let first_td = td_embeddeds.into_iter().find(|&node| {
-                        node.select(&"a".try_into().unwrap())
-                        .next().is_some()
-                }).unwrap();
-
+                // DESC
                 desc = first_td.text().last().unwrap().to_owned();
 
-                let a_tag = first_td.select(
-                    &"a".try_into().unwrap())
-                    .next().unwrap();
+                // TITLE
+                let a_tag = first_td.select(&"a".try_into().unwrap()).next().unwrap();
                 title = a_tag.value().attr("title").unwrap().to_owned();
-                src_link = a_tag.value().attr("href").unwrap().into();
 
+                // SRC_LINK
+                src_link = a_tag.value().attr("href").unwrap().into();
                 src_link = url_site.to_string() + &src_link;
+
+                // DISCOUNT
+                let free = first_td.select(&"img.pro_free".try_into().unwrap()).next();
+                let double_free = first_td
+                    .select(&"img.pro_free2up".try_into().unwrap())
+                    .next();
+                match free {
+                    Some(_) => discount = Some(Discount::Free),
+                    None => match double_free {
+                        Some(_) => discount = Some(Discount::DoubleFree),
+                        None => (),
+                    },
+                }
+                if discount.is_some() {
+                    let due: Selector = "font span".try_into().unwrap();
+                    // A time str sample: 2023-08-12 15:17:44
+                    let time = first_td.select(&due).next();
+                    if time.is_some() {
+                        let time = time.unwrap().value().attr("title").unwrap();
+                        let time = format!("{} {}", time, TIME_ZONE);
+                        let time = DateTime::parse_from_str(&time, "%Y-%m-%d %H:%M:%S %z").unwrap();
+                        discount_due = Some(time.timestamp())
+                    }
+                }
             }
             "完成数" => {
-                let td_element = td.text().next()
+                let td_element = td
+                    .text()
+                    .next()
                     // remove thousands seperator
-                    .unwrap().replace(',', ""); 
+                    .unwrap()
+                    .replace(',', "");
                 match td_element.parse() {
                     Ok(f) => finished = f,
                     Err(_) => {
-                        error!("element {} cannot be parsed as u32 as finished",
-                                td_element);
+                        error!("element {} cannot be parsed as u32 as finished", td_element);
                         panic!();
                     }
                 }
             }
             "种子数" => {
-                upload = td.text().next().unwrap()
-                    .replace(',', "").parse().unwrap();
+                upload = td.text().next().unwrap().replace(',', "").parse().unwrap();
             }
             "下载数" => {
-                download = td.text().next().unwrap()
-                    .replace(',', "").parse().unwrap();
+                download = td.text().next().unwrap().replace(',', "").parse().unwrap();
             }
             "大小" => {
                 let txt = td.text().collect_vec();
@@ -159,7 +187,7 @@ pub fn process_row_data(site: &Site, tr: ElementRef, headers: &Vec<String>) -> D
                     .value()
                     .attr("title")
                     .unwrap();
-                let time_with_zone = format!("{} {}", time, "+08:00");
+                let time_with_zone = format!("{} {}", time, TIME_ZONE);
                 let datetime =
                     DateTime::parse_from_str(&time_with_zone, "%Y-%m-%d %H:%M:%S %z").unwrap();
                 publish_time = datetime.timestamp();
@@ -170,8 +198,10 @@ pub fn process_row_data(site: &Site, tr: ElementRef, headers: &Vec<String>) -> D
 
     let time_str: DateTime<Local> = Utc.timestamp_opt(publish_time, 0).unwrap().into();
     println!(
-        "{}, {}, \n\t{}, \n\t{}/{}/{}, {} GB, {} src: {}",
-        catogray, title, desc, upload, download, finished, size, time_str, src_link
+        "{}, {}, 
+         {}, 
+         {:?} {}/{}/{}, {} GB, {} src: {}",
+        catogray, title, desc, discount, upload, download, finished, size, time_str, src_link
     );
 
     DataItem::new(
@@ -183,5 +213,7 @@ pub fn process_row_data(site: &Site, tr: ElementRef, headers: &Vec<String>) -> D
         size,
         publish_time,
         &src_link,
+        discount,
+        discount_due,
     )
 }

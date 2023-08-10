@@ -10,4 +10,3 @@ impl SaveTo for String{
         .write_all(self.as_bytes()).unwrap();
     }
 }
-

@@ -1,16 +1,14 @@
-use log::debug;
-use reqwest::{cookie::Jar, Client, IntoUrl, Url};
+use reqwest::{Client, IntoUrl, Url};
 use std::time::Duration;
 use std::{sync::Arc, thread::sleep};
 
-use crate::ptsite::{Site, read_cookies};
+use crate::ptsite::{read_cookies, Site};
 
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36";
 
-pub fn build_pt_client(site: Site) -> Client{
+pub fn build_pt_client(site: Site) -> Client {
     let url: Url = site.url_site().parse().unwrap();
-    let fpath = format!("./config/{}.cookies", 
-        site.to_string().to_lowercase());
+    let fpath = format!("./config/{}.cookies", site.to_string().to_lowercase());
     let jar = read_cookies(&fpath, &url);
 
     let jar = Arc::new(jar);
@@ -18,7 +16,8 @@ pub fn build_pt_client(site: Site) -> Client{
         .cookie_provider(jar)
         .user_agent(USER_AGENT)
         .brotli(true)
-        .build().unwrap();
+        .build()
+        .unwrap();
 
     client
 }

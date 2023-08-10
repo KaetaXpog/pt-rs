@@ -6,6 +6,9 @@ use std::io::Read;
 use std::fs::File;
 use std::str::FromStr;
 
+/// This is the default time zone for all pt sites in China.
+pub const TIME_ZONE: &str = "+08:00";
+
 pub fn okpt_url_by_page(page: u32) -> String {
     format!(
         "https://www.okpt.net/torrents.php?inclbookmarked=0&incldead=1&spstate=0&page={}",
@@ -71,7 +74,6 @@ impl Site{
             Site::GGPT => "https://www.gamegamept.com/",
             Site::CARPT => "https://carpt.net/",
             Site::PTTIME => "https://www.pttime.org/",
-            _ => todo!(),
         };
         res.to_owned()
     }
@@ -95,6 +97,14 @@ impl FromStr for Site{
             _ => Err("ParseSiteError".into())
         }
     }
+}
+
+#[derive(Debug)]
+pub enum Discount {
+    DoubleFree,
+    Free,
+    R25,
+    FiftyPerOff,
 }
 
 pub async fn scrape_icc2022(start: u32, end: u32, db_name: &str) {
