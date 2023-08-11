@@ -21,12 +21,20 @@ pub use dataitem::DataItem;
 pub fn process_table(html: &str, site: &Site) -> Vec<DataItem> {
     let document = Html::parse_document(html);
     let table_tag = Selector::parse("table.torrents").unwrap();
+
     // first table
-    let table_html = document.select(&table_tag).next().unwrap();
+    let torrents_table = document.select(&table_tag).next();
+    // If no such table, then no data. RETURN
+    if torrents_table.is_none(){
+        println!("WARN: no table.torrents, return empty vec of DataItem");
+        return vec![]
+    }
+    let table_html = torrents_table.unwrap();
     let table_html = table_html
         .select(&"tbody".try_into().unwrap())
         .next()
         .unwrap();
+    
     // first table row
     let tr_tag = Selector::parse("tr").unwrap();
     let mut trs = table_html.select(&tr_tag);

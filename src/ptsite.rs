@@ -90,7 +90,10 @@ impl Site{
                 "https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=4&cat409=1&cat405=1&cat404=1&cat401=1&page=0",
                 "https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=2&cat409=1&cat405=1&cat404=1&cat401=1&page=0"
             ],
-            Self::OKPT => todo!(),
+            Self::OKPT => vec![
+                "https://www.okpt.net/torrents.php?incldead=1&spstate=2&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0",
+                "https://www.okpt.net/torrents.php?incldead=1&spstate=4&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0"
+            ],
             _ => todo!()
         }
     }
@@ -173,16 +176,18 @@ pub async fn scrape_pt_site(site: Site, start: &str, db_name: &str){
     let conn = create_table(db_name);
 
     loop {
+        println!("SCRAPING: {}", url);
+        utils::sleep_secs(2);
+
         let html = get_html_with_retry(&client, &url, 3).await.unwrap();
         let items = process_table(&html, &site);
+        let empty = items.is_empty();
         db::insert_or_update_batch(&conn, items);
 
+        if empty{ break; }
         let nextq = parse_next_href(&html);
         if nextq.is_none() { break; }
         url = format!("{}/torrents.php{}", site.url_site(), nextq.unwrap());
-        println!("NEXT: {}", url);
-        
-        utils::sleep_secs(2);
     }
 }
 
