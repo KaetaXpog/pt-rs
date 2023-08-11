@@ -12,6 +12,8 @@ c_secure_uid=XXXXXX; c_secure_pass=XXXX; c_secure_ssl=eWVhaA%3D%3D; c_secure_tra
 2. cargo run
 
 ## TODO
+- [ ] 处理PTTIME的cloudflare盾牌
+    + [ ] RSS 方案绕过反爬
 - [x] 把cookies从代码中分离出来
 - [x] 增加爬虫调度器
     + [ ] 爬虫状态保存
@@ -22,7 +24,7 @@ c_secure_uid=XXXXXX; c_secure_pass=XXXX; c_secure_ssl=eWVhaA%3D%3D; c_secure_tra
     + [x] ggpt
     + [x] carPT
     + [x] pttime
-- [ ] 处理PTTIME的cloudflare盾牌
+
 - [ ] 识别，记载free资源
 - [ ] 检索功能
 - [ ] 展示数据
