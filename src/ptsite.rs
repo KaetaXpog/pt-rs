@@ -94,6 +94,12 @@ impl Site{
                 "https://www.okpt.net/torrents.php?incldead=1&spstate=2&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0",
                 "https://www.okpt.net/torrents.php?incldead=1&spstate=4&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0"
             ],
+            Self::PTTIME => vec![
+                "https://www.pttime.org/torrents.php?incldead=1&spstate=2&inclbookmarked=0&search=&search_area=0&search_mode=0",
+                "https://www.pttime.org/torrents.php?incldead=1&spstate=4&inclbookmarked=0&search=&search_area=0&search_mode=0",
+                "https://www.pttime.org/adults.php?incldead=1&spstate=2&inclbookmarked=0&search=&search_area=0&search_mode=0",
+                "https://www.pttime.org/adults.php?incldead=1&spstate=4&inclbookmarked=0&search=&search_area=0&search_mode=0",
+            ],
             _ => todo!()
         }
     }
