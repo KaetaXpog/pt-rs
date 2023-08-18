@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 
-use crate::DataItem;
+use crate::{ptsite::Discount, DataItem};
 use sqlite::{self, Connection};
 
 const TABLE_NAME: &str = "resources";
@@ -22,7 +22,10 @@ pub fn create_table(db_name: &str) -> Connection {
             upload          INTEGER,
             size            REAL,
             publish_time    INTEGER,
-            last_update     INTEGER
+            last_update     INTEGER,
+
+            discount        INTEGER,
+            discount_due    INTEGER
         );
     ";
     conn.execute(creat).unwrap();
@@ -34,7 +37,14 @@ pub fn delete_db<P: AsRef<Path>>(db_name: P) {
 }
 
 fn insert_item(conn: &Connection, data: &DataItem) {
-    conn.execute(data.to_insert_statement()).unwrap()
+    let ins = data.to_insert_statement();
+    match conn.execute(ins.as_str()) {
+        Ok(_) => (),
+        Err(e) => {
+            println!("QUERY: {}", ins);
+            panic!("{:?}", e);
+        }
+    }
 }
 
 /// find out whether an item is in database. Same item means
@@ -113,20 +123,36 @@ where
     str::parse(s).expect(&format!("parse {:?} failed", s))
 }
 
+fn discount_id(discount: &Option<Discount>) -> i32 {
+    match discount {
+        None => -1,
+        Some(x) => match x {
+            Discount::DoubleFree => 0,
+            Discount::Free => 1,
+            _ => 2,
+        },
+    }
+}
+
 impl DataItem {
     fn to_insert_statement(&self) -> String {
+        let discount_id: i32 = discount_id(&self.discount);
+        let due = match self.discount_due {
+            None => "-1".to_string(),
+            Some(x) => x.to_string(),
+        };
         let ins = format!(
             "
             INSERT INTO resources (
                 title, desc, 
                 finished, download, upload, 
                 size, publish_time, last_update,
-                src_link
+                src_link, discount, discount_due
             ) VALUES (
                 '{}', '{}', 
                 {}, {}, {}, 
                 {}, {}, {},
-                '{}'
+                '{}', {}, {}
             )",
             self.title.replace("'", "''"),
             self.desc.replace("'", "''"),
@@ -136,13 +162,15 @@ impl DataItem {
             self.size,
             self.publish_time,
             self.last_update,
-            self.src_link
+            self.src_link,
+            discount_id,
+            due
         );
         ins
     }
 
     fn to_name_value_string(&self) -> String {
-        format!(
+        let mut mains = format!(
             "
             title = '{}',
             desc = '{}',
@@ -155,7 +183,9 @@ impl DataItem {
             publish_time = {},
             last_update = {},
 
-            src_link = '{}'
+            src_link = '{}',
+
+            discount = {}
         ",
             self.title.replace("'", "''"),
             self.desc.replace("'", "''"),
@@ -165,8 +195,18 @@ impl DataItem {
             self.size,
             self.publish_time,
             self.last_update,
-            self.src_link
-        )
+            self.src_link,
+            discount_id(&self.discount)
+        );
+
+        match self.discount_due {
+            None => (),
+            Some(x) => {
+                mains.push_str(&format!(", discount_due = {}", x));
+            }
+        }
+
+        mains
     }
 
     fn from_name_value_pairs(nvs: &[(&str, Option<&str>)]) -> (usize, Self) {
@@ -193,6 +233,8 @@ impl DataItem {
                 "last_update" => last_update = value.to_owned().map(parse),
                 "src_link" => src_link = value.to_owned(),
                 "ID" => id = value.to_owned().map(parse),
+                "discount" => (),
+                "discount_due" => (),
                 unknown_key => {
                     println!("unknown_key: {}", unknown_key);
                     panic!();
@@ -210,70 +252,69 @@ impl DataItem {
             publish_time: publish_time.unwrap(),
             last_update: last_update.unwrap(),
             src_link: src_link.unwrap().to_owned(),
+            // TODO: None here is a expedient
+            discount: None,
+            discount_due: None,
         };
         (id.unwrap(), data)
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    /// this function is used for test data generation
+    fn gen_test_data() -> DataItem {
+        DataItem::new(
+            "ddd",
+            "this is a test",
+            5,
+            0,
+            4,
+            1.0,
+            45211,
+            "https://www.okpt.net/details.php?id=4553&hit=1",
+            None,
+            None,
+        )
+    }
 
-/// this function is used for test data generation
-fn gen_test_data() -> DataItem {
-    DataItem::new(
-        "ddd",
-        "this is a test",
-        5,
-        0,
-        4,
-        1.0,
-        45211,
-        "https://www.okpt.net/details.php?id=4553&hit=1",
-    )
-}
+    #[test]
+    fn test_insert_twice_then_query() {
+        let db_name = "./data/test/i2q.sqlite";
+        let conn = create_table(db_name);
+        let data = gen_test_data();
 
-#[test]
-fn test_insert_twice_then_query() {
-    let db_name = "./data/test/i2q.sqlite";
-    let conn = create_table(db_name);
-    let data = DataItem::new(
-        "ddd",
-        "this is a test",
-        5,
-        0,
-        4,
-        1.0,
-        45211,
-        "https://www.okpt.net/details.php?id=4553&hit=1",
-    );
+        // insert once
+        insert_item(&conn, &data);
+        let res = query_same_item(&conn, &data);
+        assert_eq!(res.len(), 1);
 
-    // insert once
-    insert_item(&conn, &data);
-    let res = query_same_item(&conn, &data);
-    assert_eq!(res.len(), 1);
+        // insert twice
+        insert_item(&conn, &data);
+        let res = query_same_item(&conn, &data);
+        assert_eq!(res.len(), 2);
 
-    // insert twice
-    insert_item(&conn, &data);
-    let res = query_same_item(&conn, &data);
-    assert_eq!(res.len(), 2);
+        // if conn is not dropped here, file descriptor of db_name
+        // may prevent immediate removal
+        drop(conn);
+        // delete the test file
+        delete_db(db_name);
+    }
 
-    // if conn is not dropped here, file descriptor of db_name
-    // may prevent immediate removal
-    drop(conn);
-    // delete the test file
-    delete_db(db_name);
-}
+    #[test]
+    fn test_insert_or_update_item() {
+        let db_name = "./data/test/iou.sqlite";
+        let conn = create_table(db_name);
+        let data = gen_test_data();
 
-#[test]
-fn test_insert_or_update_item() {
-    let db_name = "./data/test/iou.sqlite";
-    let conn = create_table(db_name);
-    let data = gen_test_data();
+        insert_or_update_item(&conn, &data);
+        insert_or_update_item(&conn, &data);
+        insert_or_update_item(&conn, &data);
+        let res = query_same_item(&conn, &data);
+        assert_eq!(res.len(), 1);
 
-    insert_or_update_item(&conn, &data);
-    insert_or_update_item(&conn, &data);
-    insert_or_update_item(&conn, &data);
-    let res = query_same_item(&conn, &data);
-    assert_eq!(res.len(), 1);
-
-    drop(conn);
-    delete_db(db_name);
+        drop(conn);
+        delete_db(db_name);
+    }
 }

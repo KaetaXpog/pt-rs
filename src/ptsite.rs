@@ -1,10 +1,18 @@
+use crate::client::get_html_with_retry;
+use crate::db::create_table;
 /// some pt site related logic
 use crate::scheduler::Scheduler;
-use crate::db;
+use crate::{db, client, process_table};
+
 use reqwest::{cookie::Jar, Url};
 use std::io::Read;
 use std::fs::File;
 use std::str::FromStr;
+use crate::parse::parse_next_href;
+use crate::utils;
+
+/// This is the default time zone for all pt sites in China.
+pub const TIME_ZONE: &str = "+08:00";
 
 pub fn okpt_url_by_page(page: u32) -> String {
     format!(
@@ -18,6 +26,8 @@ pub fn icc2022_url_by_page(page: u32) -> String {
         "https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=0&cat409=1&cat405=1&cat404=1&cat401=1&page={}",
         page
     )
+    // spstate: 2 -> free, 4-> 2xfree
+    // format!("https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=4&cat409=1&cat405=1&cat404=1&cat401=1&page={}", )
 }
 
 fn ggpt_url_by_page(page: u32) -> String{
@@ -43,7 +53,12 @@ fn pttime_url_by_page(page: u32) -> String{
 
 pub fn read_cookies(fpath: &str, url: &Url) -> Jar{
     let mut s: String = String::new();
-    let mut reader = File::open(fpath).unwrap();
+    let mut reader = match File::open(fpath){
+        Ok(r) => r,
+        Err(_) => {
+            panic!("FILE {} NOT FOUND", fpath)
+        }
+    };
     reader.read_to_string(&mut s).unwrap();
 
     let jar = Jar::default();
@@ -71,9 +86,34 @@ impl Site{
             Site::GGPT => "https://www.gamegamept.com/",
             Site::CARPT => "https://carpt.net/",
             Site::PTTIME => "https://www.pttime.org/",
-            _ => todo!(),
         };
         res.to_owned()
+    }
+    pub fn free_starts(&self) -> Vec<&str>{
+        match self {
+            Self::ICC2022 => vec![
+                "https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=4&cat409=1&cat405=1&cat404=1&cat401=1&page=0",
+                "https://www.icc2022.com/torrents.php?inclbookmarked=0&incldead=1&spstate=2&cat409=1&cat405=1&cat404=1&cat401=1&page=0"
+            ],
+            Self::OKPT => vec![
+                "https://www.okpt.net/torrents.php?incldead=1&spstate=2&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0",
+                "https://www.okpt.net/torrents.php?incldead=1&spstate=4&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0"
+            ],
+            Self::PTTIME => vec![
+                "https://www.pttime.org/torrents.php?incldead=1&spstate=2&inclbookmarked=0&search=&search_area=0&search_mode=0",
+                "https://www.pttime.org/torrents.php?incldead=1&spstate=4&inclbookmarked=0&search=&search_area=0&search_mode=0",
+                "https://www.pttime.org/adults.php?incldead=1&spstate=2&inclbookmarked=0&search=&search_area=0&search_mode=0",
+                "https://www.pttime.org/adults.php?incldead=1&spstate=4&inclbookmarked=0&search=&search_area=0&search_mode=0",
+            ],
+            Self::GGPT => vec![
+                "https://www.gamegamept.com/torrents.php?incldead=1&spstate=2&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0",
+                "https://www.gamegamept.com/torrents.php?incldead=1&spstate=4&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0"
+            ],
+            Self::CARPT => vec![
+                "https://carpt.net/torrents.php?cat401=1&cat402=1&cat403=1&cat404=1&cat405=1&cat407=1&incldead=1&spstate=2&inclbookmarked=0&search=&search_area=0&search_mode=0",
+                "https://carpt.net/torrents.php?cat401=1&cat402=1&cat403=1&cat404=1&cat405=1&cat407=1&incldead=1&spstate=4&inclbookmarked=0&search=&search_area=0&search_mode=0"
+            ]
+        }
     }
 }
 
@@ -95,6 +135,14 @@ impl FromStr for Site{
             _ => Err("ParseSiteError".into())
         }
     }
+}
+
+#[derive(Debug)]
+pub enum Discount {
+    DoubleFree,
+    Free,
+    R25,
+    FiftyPerOff,
 }
 
 pub async fn scrape_icc2022(start: u32, end: u32, db_name: &str) {
@@ -136,6 +184,29 @@ pub async fn scrape_pttime(start: u32, end: u32, db_name: &str){
     );
     let conn = db::create_table(db_name);
     sche.finish_the_work(&conn).await;
+}
+
+/// Assuming there exists only one {} in url_template which can be replaced
+/// example: `https://www.icc2022.com/torrents.php?cat401=1&page={}`
+pub async fn scrape_pt_site(site: Site, start: &str, db_name: &str){
+    let client = client::build_pt_client(site);
+    let mut url = start.to_owned();
+    let conn = create_table(db_name);
+
+    loop {
+        println!("SCRAPING: {}", url);
+        utils::sleep_secs(2);
+
+        let html = get_html_with_retry(&client, &url, 3).await.unwrap();
+        let items = process_table(&html, &site);
+        let empty = items.is_empty();
+        db::insert_or_update_batch(&conn, items);
+
+        if empty{ break; }
+        let nextq = parse_next_href(&html);
+        if nextq.is_none() { break; }
+        url = format!("{}/torrents.php{}", site.url_site(), nextq.unwrap());
+    }
 }
 
 #[test]
