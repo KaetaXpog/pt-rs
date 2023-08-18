@@ -53,7 +53,12 @@ fn pttime_url_by_page(page: u32) -> String{
 
 pub fn read_cookies(fpath: &str, url: &Url) -> Jar{
     let mut s: String = String::new();
-    let mut reader = File::open(fpath).unwrap();
+    let mut reader = match File::open(fpath){
+        Ok(r) => r,
+        Err(_) => {
+            panic!("FILE {} NOT FOUND", fpath)
+        }
+    };
     reader.read_to_string(&mut s).unwrap();
 
     let jar = Jar::default();
@@ -100,7 +105,14 @@ impl Site{
                 "https://www.pttime.org/adults.php?incldead=1&spstate=2&inclbookmarked=0&search=&search_area=0&search_mode=0",
                 "https://www.pttime.org/adults.php?incldead=1&spstate=4&inclbookmarked=0&search=&search_area=0&search_mode=0",
             ],
-            _ => todo!()
+            Self::GGPT => vec![
+                "https://www.gamegamept.com/torrents.php?incldead=1&spstate=2&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0",
+                "https://www.gamegamept.com/torrents.php?incldead=1&spstate=4&inclbookmarked=0&size_begin=&size_end=&seeders_begin=&seeders_end=&leechers_begin=&leechers_end=&times_completed_begin=&times_completed_end=&added_begin=&added_end=&search=&search_area=0&search_mode=0"
+            ],
+            Self::CARPT => vec![
+                "https://carpt.net/torrents.php?cat401=1&cat402=1&cat403=1&cat404=1&cat405=1&cat407=1&incldead=1&spstate=2&inclbookmarked=0&search=&search_area=0&search_mode=0",
+                "https://carpt.net/torrents.php?cat401=1&cat402=1&cat403=1&cat404=1&cat405=1&cat407=1&incldead=1&spstate=4&inclbookmarked=0&search=&search_area=0&search_mode=0"
+            ]
         }
     }
 }

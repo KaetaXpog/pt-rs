@@ -1,6 +1,7 @@
 /target
 *.sqlite
+archive
+
 data/*
 !data/.gitkeep
-
 config/*.cookies

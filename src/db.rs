@@ -37,7 +37,14 @@ pub fn delete_db<P: AsRef<Path>>(db_name: P) {
 }
 
 fn insert_item(conn: &Connection, data: &DataItem) {
-    conn.execute(data.to_insert_statement()).unwrap()
+    let ins = data.to_insert_statement();
+    match conn.execute(ins.as_str()) {
+        Ok(_) => (),
+        Err(e) => {
+            println!("QUERY: {}", ins);
+            panic!("{:?}", e);
+        }
+    }
 }
 
 /// find out whether an item is in database. Same item means
@@ -131,7 +138,7 @@ impl DataItem {
     fn to_insert_statement(&self) -> String {
         let discount_id: i32 = discount_id(&self.discount);
         let due = match self.discount_due {
-            None => "".to_string(),
+            None => "-1".to_string(),
             Some(x) => x.to_string(),
         };
         let ins = format!(
