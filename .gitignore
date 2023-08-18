@@ -1,5 +1,7 @@
 /target
 *.sqlite
+archive/*.zip
+
 data/*
 !data/.gitkeep
 
